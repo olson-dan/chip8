@@ -169,12 +169,12 @@ let disassemble x =
 	inst, state
 
 let execute x =
-	let inst, state = x in
+	let inst, s = x in
 	let get reg = match reg with
-		| 0x0uy -> state.v0 | 0x1uy -> state.v1 | 0x2uy -> state.v2 | 0x3uy -> state.v3
-		| 0x4uy -> state.v4 | 0x5uy -> state.v5 | 0x6uy -> state.v6 | 0x7uy -> state.v7
-		| 0x8uy -> state.v8 | 0x9uy -> state.v9 | 0xauy -> state.va | 0xbuy -> state.vb
-		| 0xcuy -> state.vc | 0xduy -> state.vd | 0xeuy -> state.ve | 0xfuy -> state.vf
+		| 0x0uy -> s.v0 | 0x1uy -> s.v1 | 0x2uy -> s.v2 | 0x3uy -> s.v3
+		| 0x4uy -> s.v4 | 0x5uy -> s.v5 | 0x6uy -> s.v6 | 0x7uy -> s.v7
+		| 0x8uy -> s.v8 | 0x9uy -> s.v9 | 0xauy -> s.va | 0xbuy -> s.vb
+		| 0xcuy -> s.vc | 0xduy -> s.vd | 0xeuy -> s.ve | 0xfuy -> s.vf
 		| _ -> failwith "invalid register" in
 	let set reg value state = match reg with
 		| 0x0uy -> { state with v0 = value } | 0x1uy -> { state with v1 = value }
@@ -186,45 +186,59 @@ let execute x =
 		| 0xcuy -> { state with vc = value } | 0xduy -> { state with vd = value }
 		| 0xeuy -> { state with ve = value } | 0xfuy -> { state with vf = value }
 		| _ -> failwith "invalid register" in
+	let seti value state = { state with addr = value } in
 	let next state = { state with ip = state.ip + 2 } in
 	let skip state = { state with ip = state.ip + 4 } in
 	let jmp addr state = { state with ip = (addr |> int) } in
 	match inst with
-	| ClearScreen -> state |> next
-	| Return -> state |> next
-	| SysCall(addr) -> state |> next
-	| Jump(addr) -> state |> jmp addr
-	| Call(addr) -> state |> jmp addr
-	| SkipIfEqual(x,c) -> if (get x) = c then state |> skip else state |> next
-	| SkipIfNotEqual(x,c) -> if (get x) <> c then state |> skip else state |> next
-	| SkipIfRegistersEqual(x,y) -> if (get x) = (get y) then state |> skip else state |> next
-	| SetImmediate(x,c) -> state |> set x c |> next
-	| AddImmediate(x,c) -> state |> set x ((get x) + c) |> next
-	| SetRegister(x,y) -> state
-	| OrRegister(x,y) -> state
-	| AndRegister(x,y) -> state
-	| XorRegister(x,y) -> state
-	| AdcRegister(x,y) -> state
-	| SwbRegister(x,y) -> state
-	| ShrRegister(x,y) -> state
-	| ReverseSwbRegister(x,y) -> state
-	| ShlRegister(x,y) -> state
-	| SkipIfRegistersNotEqual(x,y) -> if (get x) <> (get y) then state |> skip else state |> next
-	| StoreAddress(addr) -> state
-	| JumpOffset(addr) -> state
-	| StoreRandom(x,c) -> state
-	| DrawSprite(x,y,c) -> state
-	| SkipIfPressed(x) -> state
-	| SkipIfNotPressed(x) -> state
-	| SetFromDelay(x) -> state
-	| WaitKeyPress(x) -> state
-	| SetToDelay(x) -> state
-	| SetToSound(x) -> state
-	| AddAddress(x) -> state
-	| SetAddressToSprite(x) -> state
-	| StoreBCD(x) -> state
-	| StoreRegisters(x) -> state
-	| LoadRegisters(x) -> state
+	| ClearScreen -> s |> next // TODO
+	| Return -> s |> next // TODO
+	| SysCall(addr) -> s |> next
+	| Jump(addr) -> s |> jmp addr
+	| Call(addr) -> s |> jmp addr // TODO
+	| SkipIfEqual(x,c) -> if (get x) = c then s |> skip else s |> next
+	| SkipIfNotEqual(x,c) -> if (get x) <> c then s |> skip else s |> next
+	| SkipIfRegistersEqual(x,y) -> if (get x) = (get y) then s |> skip else s |> next
+	| SetImmediate(x,c) -> s |> set x c |> next
+	| AddImmediate(x,c) -> s |> set x ((get x) + c) |> next
+	| SetRegister(x,y) -> s |> set x (get y) |> next
+	| OrRegister(x,y) -> s |> set x ((get x) ||| (get y)) |> next
+	| AndRegister(x,y) -> s |> set x ((get x) &&& (get y)) |> next
+	| XorRegister(x,y) -> s |> set x ((get x) ^^^ (get y)) |> next
+	| AdcRegister(x,y) ->
+		let a, b = get x, get y in
+		let c = if a + b < a then 1uy else 0uy in
+		s |> set x (a + b) |> set 0xfuy c |> next
+	| SwbRegister(x,y) ->
+		let a, b = get x, get y in
+		let c = if a > b then 1uy else 0uy in
+		s |> set x (a - b) |> set 0xfuy c |> next
+	| ShrRegister(x,y) ->
+		let a = get x in
+		s |> set x (a >>> 1) |> set 0xfuy (a &&& 1uy) |> next
+	| ReverseSwbRegister(x,y) ->
+		let a, b = get x, get y in
+		let c = if b > a then 1uy else 0uy in
+		s |> set x (b - a) |> set 0xfuy c |> next
+	| ShlRegister(x,y) ->
+		let a = get x in
+		s |> set x (a <<< 1) |> set 0xfuy (a &&& 0x80uy) |> next
+	| SkipIfRegistersNotEqual(x,y) -> if (get x) <> (get y) then s |> skip else s |> next
+	| StoreAddress(addr) -> s |> seti addr |> next
+	| JumpOffset(addr) -> s |> jmp (addr + (get 0uy |> uint16))
+	| StoreRandom(x,c) -> s |> next // TODO
+	| DrawSprite(x,y,c) -> s |> next // TODO
+	| SkipIfPressed(x) -> s |> skip // TODO
+	| SkipIfNotPressed(x) -> s |> next // TODO
+	| SetFromDelay(x) -> s |> set x (timers.delayValue) |> next
+	| WaitKeyPress(x) -> s |> next // TODO
+	| SetToDelay(x) -> timers <- { timers with delayValue = get x}; s |> next
+	| SetToSound(x) -> timers <- { timers with soundValue = get x}; s |> next
+	| AddAddress(x) -> s |> seti (s.addr + (get x |> uint16)) |> next
+	| SetAddressToSprite(x) -> s |> next // TODO
+	| StoreBCD(x) -> s |> next // TODO
+	| StoreRegisters(x) -> s |> next // TODO
+	| LoadRegisters(x) -> s |> next // TODO
 
 let run () =
 	let disassemble = if debug then disassemble else (fun x -> x) in
