@@ -140,21 +140,50 @@ let decode state =
 	| 0xfuy when c = 0x3uy && d = 0x3uy -> StoreBCD(b)
 	| 0xfuy when c = 0x5uy && d = 0x5uy -> StoreRegisters(b)
 	| 0xfuy when c = 0x6uy && d = 0x5uy -> LoadRegisters(b)
-	| _ -> failwith <| sprintf "Unknown opcode %X%X%X%X" a b c d
+	| _ -> failwith <| sprintf "Unknown opcode at %03X: %X%X%X%X" state.ip a b c d
 	in
 	inst, state
 
 let disassemble x =
 	let inst, state = x in
-	let _ = match inst with
-	| ClearScreen -> printfn "CLS"
-	| Return -> printfn "RET"
-	| SysCall(addr) -> printfn "SYS %03X" addr
-	| Jump(addr) -> printfn "JP %03X" addr
-	| Call(addr) -> printfn "CALL %03X" addr
-	| SkipIfEqual(r,c) -> printfn "SE V%X, %02X" r c
-	| SkipIfNotEqual(r,c) -> printfn "SNE V%X, %02X" r c
+	let label = match inst with
+	| ClearScreen -> "CLS"
+	| Return -> "RET"
+	| SysCall(addr) -> sprintf "SYS %03X" addr
+	| Jump(addr) -> sprintf "JP %03X" addr
+	| Call(addr) -> sprintf "CALL %03X" addr
+	| SkipIfEqual(x,c) -> sprintf "SE V%X, %02X" x c
+	| SkipIfNotEqual(x,c) -> sprintf "SNE V%X, %02X" x c
+	| SkipIfRegistersEqual(x,y) -> sprintf "SE V%X, V%X" x y
+	| SetImmediate(x,c) -> sprintf "LD V%X, %02X" x c
+	| AddImmediate(x,c) -> sprintf "ADD V%X, %02X" x c
+	| SetRegister(x,y) -> sprintf "LD V%X, V%X" x y
+	| OrRegister(x,y) -> sprintf "OR V%X, V%X" x y
+	| AndRegister(x,y) -> sprintf "AND V%X, V%X" x y
+	| XorRegister(x,y) -> sprintf "XOR V%X, V%X" x y
+	| AdcRegister(x,y) -> sprintf "ADD V%X, V%X" x y
+	| SwbRegister(x,y) -> sprintf "SUB V%X, V%X" x y
+	| ShrRegister(x,y) -> sprintf "SHR V%X, V%X" x y
+	| ReverseSwbRegister(x,y) -> sprintf "SUBN V%X, V%X" x y
+	| ShlRegister(x,y) -> sprintf "SHL V%X, V%X" x y
+	| SkipIfRegistersNotEqual(x,y) -> sprintf "SNE V%X, V%X" x y
+	| StoreAddress(addr) -> sprintf "LD I, %03X" addr
+	| JumpOffset(addr) -> sprintf "JP V0, %03X" addr
+	| StoreRandom(x,c) -> sprintf "RND V%X, %02X" x c
+	| DrawSprite(x,y,c) -> sprintf "DRW V%X, V%X, %X" x y c
+	| SkipIfPressed(x) -> sprintf "SKP V%X" x
+	| SkipIfNotPressed(x) -> sprintf "SKNP V%X" x
+	| SetFromDelay(x) -> sprintf "LD V%X, DT" x
+	| WaitKeyPress(x) -> sprintf "LD V%X, K" x
+	| SetToDelay(x) -> sprintf "LD DT, %X" x
+	| SetToSound(x) -> sprintf "LD ST, %X" x
+	| AddAddress(x) -> sprintf "ADD I, V%X" x
+	| SetAddressToSprite(x) -> sprintf "LD F, V%X" x
+	| StoreBCD(x) -> sprintf "LD B, V%X" x
+	| StoreRegisters(x) -> sprintf "LD [I], V%X" x
+	| LoadRegisters(x) -> sprintf "LD V%X, [I]" x
 	in
+	printfn "%03X: %s" state.ip label;
 	inst, state
 
 let execute x = let a,b = x in b
