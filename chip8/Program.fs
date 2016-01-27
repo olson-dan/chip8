@@ -56,24 +56,6 @@ type machineState = {
 
 type timer = { delayValue : uint8; soundValue : uint8; lastUpdate : DateTime }
 
-let getRegister state = function
-	| 0x0uy -> state.v0 | 0x1uy -> state.v1 | 0x2uy -> state.v2 | 0x3uy -> state.v3
-	| 0x4uy -> state.v4 | 0x5uy -> state.v5 | 0x6uy -> state.v6 | 0x7uy -> state.v7
-	| 0x8uy -> state.v8 | 0x9uy -> state.v9 | 0xauy -> state.va | 0xbuy -> state.vb
-	| 0xcuy -> state.vc | 0xduy -> state.vd | 0xeuy -> state.ve | 0xfuy -> state.vf
-	| _ -> failwith "invalid register"
-
-let setRegister state value = function
-	| 0x0uy -> { state with v0 = value } | 0x1uy -> { state with v1 = value }
-	| 0x2uy -> { state with v2 = value } | 0x3uy -> { state with v3 = value }
-	| 0x4uy -> { state with v4 = value } | 0x5uy -> { state with v5 = value }
-	| 0x6uy -> { state with v6 = value } | 0x7uy -> { state with v7 = value }
-	| 0x8uy -> { state with v8 = value } | 0x9uy -> { state with v9 = value }
-	| 0xauy -> { state with va = value } | 0xbuy -> { state with vb = value }
-	| 0xcuy -> { state with vc = value } | 0xduy -> { state with vd = value }
-	| 0xeuy -> { state with ve = value } | 0xfuy -> { state with vf = value }
-	| _ -> failwith "invalid register"
-	
 let mutable state = {
 	ip = 0; finished = false; addr = 0us;
 	v0 = 0uy; v1 = 0uy; v2 = 0uy; v3 = 0uy;
@@ -186,7 +168,63 @@ let disassemble x =
 	printfn "%03X: %s" state.ip label;
 	inst, state
 
-let execute x = let a,b = x in b
+let execute x =
+	let inst, state = x in
+	let get reg = match reg with
+		| 0x0uy -> state.v0 | 0x1uy -> state.v1 | 0x2uy -> state.v2 | 0x3uy -> state.v3
+		| 0x4uy -> state.v4 | 0x5uy -> state.v5 | 0x6uy -> state.v6 | 0x7uy -> state.v7
+		| 0x8uy -> state.v8 | 0x9uy -> state.v9 | 0xauy -> state.va | 0xbuy -> state.vb
+		| 0xcuy -> state.vc | 0xduy -> state.vd | 0xeuy -> state.ve | 0xfuy -> state.vf
+		| _ -> failwith "invalid register" in
+	let set reg value state = match reg with
+		| 0x0uy -> { state with v0 = value } | 0x1uy -> { state with v1 = value }
+		| 0x2uy -> { state with v2 = value } | 0x3uy -> { state with v3 = value }
+		| 0x4uy -> { state with v4 = value } | 0x5uy -> { state with v5 = value }
+		| 0x6uy -> { state with v6 = value } | 0x7uy -> { state with v7 = value }
+		| 0x8uy -> { state with v8 = value } | 0x9uy -> { state with v9 = value }
+		| 0xauy -> { state with va = value } | 0xbuy -> { state with vb = value }
+		| 0xcuy -> { state with vc = value } | 0xduy -> { state with vd = value }
+		| 0xeuy -> { state with ve = value } | 0xfuy -> { state with vf = value }
+		| _ -> failwith "invalid register" in
+	let next state = { state with ip = state.ip + 2 } in
+	let skip state = { state with ip = state.ip + 4 } in
+	let jmp addr state = { state with ip = (addr |> int) } in
+	match inst with
+	| ClearScreen -> state |> next
+	| Return -> state |> next
+	| SysCall(addr) -> state |> next
+	| Jump(addr) -> state |> jmp addr
+	| Call(addr) -> state |> jmp addr
+	| SkipIfEqual(x,c) -> if (get x) = c then state |> skip else state |> next
+	| SkipIfNotEqual(x,c) -> if (get x) <> c then state |> skip else state |> next
+	| SkipIfRegistersEqual(x,y) -> if (get x) = (get y) then state |> skip else state |> next
+	| SetImmediate(x,c) -> state |> set x c |> next
+	| AddImmediate(x,c) -> state |> set x ((get x) + c) |> next
+	| SetRegister(x,y) -> state
+	| OrRegister(x,y) -> state
+	| AndRegister(x,y) -> state
+	| XorRegister(x,y) -> state
+	| AdcRegister(x,y) -> state
+	| SwbRegister(x,y) -> state
+	| ShrRegister(x,y) -> state
+	| ReverseSwbRegister(x,y) -> state
+	| ShlRegister(x,y) -> state
+	| SkipIfRegistersNotEqual(x,y) -> if (get x) <> (get y) then state |> skip else state |> next
+	| StoreAddress(addr) -> state
+	| JumpOffset(addr) -> state
+	| StoreRandom(x,c) -> state
+	| DrawSprite(x,y,c) -> state
+	| SkipIfPressed(x) -> state
+	| SkipIfNotPressed(x) -> state
+	| SetFromDelay(x) -> state
+	| WaitKeyPress(x) -> state
+	| SetToDelay(x) -> state
+	| SetToSound(x) -> state
+	| AddAddress(x) -> state
+	| SetAddressToSprite(x) -> state
+	| StoreBCD(x) -> state
+	| StoreRegisters(x) -> state
+	| LoadRegisters(x) -> state
 
 let run () =
 	let disassemble = if debug then disassemble else (fun x -> x) in
