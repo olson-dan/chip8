@@ -3,6 +3,8 @@
 open System
 open System.IO
 
+let debug = true
+
 type address = uint16
 type register = uint8
 type constant = uint8
@@ -55,41 +57,21 @@ type machineState = {
 type timer = { delayValue : uint8; soundValue : uint8; lastUpdate : DateTime }
 
 let getRegister state = function
-	| 0x0uy -> state.v0
-	| 0x1uy -> state.v1
-	| 0x2uy -> state.v2
-	| 0x3uy -> state.v3
-	| 0x4uy -> state.v4
-	| 0x5uy -> state.v5
-	| 0x6uy -> state.v6
-	| 0x7uy -> state.v7
-	| 0x8uy -> state.v8
-	| 0x9uy -> state.v9
-	| 0xauy -> state.va
-	| 0xbuy -> state.vb
-	| 0xcuy -> state.vc
-	| 0xduy -> state.vd
-	| 0xeuy -> state.ve
-	| 0xfuy -> state.vf
+	| 0x0uy -> state.v0 | 0x1uy -> state.v1 | 0x2uy -> state.v2 | 0x3uy -> state.v3
+	| 0x4uy -> state.v4 | 0x5uy -> state.v5 | 0x6uy -> state.v6 | 0x7uy -> state.v7
+	| 0x8uy -> state.v8 | 0x9uy -> state.v9 | 0xauy -> state.va | 0xbuy -> state.vb
+	| 0xcuy -> state.vc | 0xduy -> state.vd | 0xeuy -> state.ve | 0xfuy -> state.vf
 	| _ -> failwith "invalid register"
 
 let setRegister state value = function
-	| 0x0uy -> { state with v0 = value }
-	| 0x1uy -> { state with v1 = value }
-	| 0x2uy -> { state with v2 = value }
-	| 0x3uy -> { state with v3 = value }
-	| 0x4uy -> { state with v4 = value }
-	| 0x5uy -> { state with v5 = value }
-	| 0x6uy -> { state with v6 = value }
-	| 0x7uy -> { state with v7 = value }
-	| 0x8uy -> { state with v8 = value }
-	| 0x9uy -> { state with v9 = value }
-	| 0xauy -> { state with va = value }
-	| 0xbuy -> { state with vb = value }
-	| 0xcuy -> { state with vc = value }
-	| 0xduy -> { state with vd = value }
-	| 0xeuy -> { state with ve = value }
-	| 0xfuy -> { state with vf = value }
+	| 0x0uy -> { state with v0 = value } | 0x1uy -> { state with v1 = value }
+	| 0x2uy -> { state with v2 = value } | 0x3uy -> { state with v3 = value }
+	| 0x4uy -> { state with v4 = value } | 0x5uy -> { state with v5 = value }
+	| 0x6uy -> { state with v6 = value } | 0x7uy -> { state with v7 = value }
+	| 0x8uy -> { state with v8 = value } | 0x9uy -> { state with v9 = value }
+	| 0xauy -> { state with va = value } | 0xbuy -> { state with vb = value }
+	| 0xcuy -> { state with vc = value } | 0xduy -> { state with vd = value }
+	| 0xeuy -> { state with ve = value } | 0xfuy -> { state with vf = value }
 	| _ -> failwith "invalid register"
 	
 let mutable state = {
@@ -149,14 +131,36 @@ let decode state =
 	| 0xduy -> DrawSprite(b, c, d)
 	| 0xeuy when c = 0x9uy && d = 0xeuy -> SkipIfPressed(b)
 	| 0xeuy when c = 0xauy && d = 0x1uy -> SkipIfNotPressed(b)
+	| 0xfuy when c = 0x0uy && d = 0x7uy -> SetFromDelay(b)
+	| 0xfuy when c = 0x0uy && d = 0xauy -> WaitKeyPress(b)
+	| 0xfuy when c = 0x1uy && d = 0x5uy -> SetToDelay(b)
+	| 0xfuy when c = 0x1uy && d = 0x8uy -> SetToSound(b)
+	| 0xfuy when c = 0x1uy && d = 0xeuy -> AddAddress(b)
+	| 0xfuy when c = 0x2uy && d = 0x9uy -> SetAddressToSprite(b)
+	| 0xfuy when c = 0x3uy && d = 0x3uy -> StoreBCD(b)
+	| 0xfuy when c = 0x5uy && d = 0x5uy -> StoreRegisters(b)
+	| 0xfuy when c = 0x6uy && d = 0x5uy -> LoadRegisters(b)
 	| _ -> failwith <| sprintf "Unknown opcode %X%X%X%X" a b c d
 	in
 	inst, state
 
-let disassemble x = let a,b = x in b
-let execute x = x
+let disassemble x =
+	let inst, state = x in
+	let _ = match inst with
+	| ClearScreen -> printfn "CLS"
+	| Return -> printfn "RET"
+	| SysCall(addr) -> printfn "SYS %03X" addr
+	| Jump(addr) -> printfn "JP %03X" addr
+	| Call(addr) -> printfn "CALL %03X" addr
+	| SkipIfEqual(r,c) -> printfn "SE V%X, %02X" r c
+	| SkipIfNotEqual(r,c) -> printfn "SNE V%X, %02X" r c
+	in
+	inst, state
+
+let execute x = let a,b = x in b
 
 let run () =
+	let disassemble = if debug then disassemble else (fun x -> x) in
 	while state.finished <> true do
 		timers <- updateTimers timers;
 		state <- state |> decode |> disassemble |> execute
