@@ -11,8 +11,6 @@ type constant = uint8
 
 type behavior = OLD | NEW
 
-let shiftBehavior = NEW
-
 type instruction =
 	| SysCall of address
 	| ClearScreen
@@ -59,6 +57,8 @@ type machineState = {
 }
 
 type timer = { delayValue : uint8; soundValue : uint8; lastUpdate : DateTime }
+
+let shiftBehavior = NEW
 
 let stack = [|
 	0us; 0us; 0us; 0us;
@@ -243,14 +243,17 @@ let execute x =
 	| JumpOffset(addr) -> s |> jmp (addr + (get 0uy |> uint16))
 	| StoreRandom(x,c) -> s |> set x ((rand.Next(0, 255) |> uint8) &&& c) |> next
 	| DrawSprite(x,y,c) -> s |> next // TODO
-	| SkipIfPressed(x) -> s |> skip // TODO
-	| SkipIfNotPressed(x) -> s |> next // TODO
+	| SkipIfPressed(x) -> s |> next // TODO
+	| SkipIfNotPressed(x) -> s |> skip // TODO
 	| SetFromDelay(x) -> s |> set x (timers.delayValue) |> next
 	| WaitKeyPress(x) -> s |> next // TODO
 	| SetToDelay(x) -> timers <- { timers with delayValue = get x}; s |> next
 	| SetToSound(x) -> timers <- { timers with soundValue = get x}; s |> next
 	| AddAddress(x) -> s |> seti (s.addr + (get x |> uint16)) |> next
-	| SetAddressToSprite(x) -> s |> next // TODO
+	| SetAddressToSprite(x) ->
+		(match get x with
+		| a when a <= 0xfuy -> s |> seti (5us * (a |> uint16)) |> next
+		| a -> failwith <| sprintf "Attempt to access invalid rom font glyph %X" a)
 	| StoreBCD(x) -> s |> next // TODO
 	| StoreRegisters(x) ->
 		for i in 0uy .. x do
@@ -272,7 +275,24 @@ let run () =
 	done
 
 let loadRom name =
-	File.ReadAllBytes(name).CopyTo(mem,0x200)
+	File.ReadAllBytes(name).CopyTo(mem,0x200);
+	// Rom font
+	[| 0xf0uy; 0x90uy; 0x90uy; 0x90uy; 0xf0uy |].CopyTo (mem, 5 * 0x0);
+	[| 0x20uy; 0x60uy; 0x20uy; 0x20uy; 0x70uy |].CopyTo (mem, 5 * 0x1);
+	[| 0xf0uy; 0x10uy; 0xf0uy; 0x80uy; 0xf0uy |].CopyTo (mem, 5 * 0x2);
+	[| 0xf0uy; 0x10uy; 0xf0uy; 0x10uy; 0xf0uy |].CopyTo (mem, 5 * 0x3);
+	[| 0x90uy; 0x90uy; 0xf0uy; 0x10uy; 0x10uy |].CopyTo (mem, 5 * 0x4);
+	[| 0xf0uy; 0x80uy; 0xf0uy; 0x10uy; 0x80uy |].CopyTo (mem, 5 * 0x5);
+	[| 0xf0uy; 0x80uy; 0xf0uy; 0x90uy; 0xf0uy |].CopyTo (mem, 5 * 0x6);
+	[| 0xf0uy; 0x10uy; 0x20uy; 0x40uy; 0x40uy |].CopyTo (mem, 5 * 0x7);
+	[| 0xf0uy; 0x90uy; 0xf0uy; 0x90uy; 0xf0uy |].CopyTo (mem, 5 * 0x8);
+	[| 0xf0uy; 0x90uy; 0xf0uy; 0x10uy; 0xf0uy |].CopyTo (mem, 5 * 0x9);
+	[| 0xf0uy; 0x90uy; 0xf0uy; 0x90uy; 0x90uy |].CopyTo (mem, 5 * 0xa);
+	[| 0xe0uy; 0x90uy; 0xe0uy; 0x90uy; 0xe0uy |].CopyTo (mem, 5 * 0xb);
+	[| 0xf0uy; 0x80uy; 0x80uy; 0x80uy; 0xf0uy |].CopyTo (mem, 5 * 0xc);
+	[| 0xe0uy; 0x90uy; 0x90uy; 0x90uy; 0xe0uy |].CopyTo (mem, 5 * 0xd);
+	[| 0xf0uy; 0x80uy; 0xf0uy; 0x80uy; 0xf0uy |].CopyTo (mem, 5 * 0xe);
+	[| 0xf0uy; 0x80uy; 0xf0uy; 0x80uy; 0x80uy |].CopyTo (mem, 5 * 0xf)
 
 do
 	loadRom "PONG";
