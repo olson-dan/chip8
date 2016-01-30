@@ -25,6 +25,7 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile>bin\Debug\chip8.XML</DocumentationFile>
     <Prefer32Bit>true</Prefer32Bit>
+    <StartWorkingDirectory>C:\Users\Dan\Documents\Visual Studio 2015\Projects\chip8\roms\</StartWorkingDirectory>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>

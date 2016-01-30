@@ -47,7 +47,7 @@ type instruction =
 	| LoadRegisters of register
 
 type machineState = {
-	ip : int; finished : bool; addr : uint16;
+	ip : int; finished : bool; addr : uint16; sp : int;
 	v0 : uint8; v1 : uint8; v2 : uint8; v3 : uint8;
 	v4 : uint8; v5 : uint8; v6 : uint8; v7 : uint8;
 	v8 : uint8; v9 : uint8; va : uint8; vb : uint8;
@@ -56,15 +56,21 @@ type machineState = {
 
 type timer = { delayValue : uint8; soundValue : uint8; lastUpdate : DateTime }
 
+let stack = [|
+	0us; 0us; 0us; 0us;
+	0us; 0us; 0us; 0us;
+	0us; 0us; 0us; 0us;
+	0us; 0us; 0us; 0us;	|]
+
 let mutable state = {
-	ip = 0; finished = false; addr = 0us;
+	ip = 0x200; finished = false; addr = 0us; sp = 0;
 	v0 = 0uy; v1 = 0uy; v2 = 0uy; v3 = 0uy;
 	v4 = 0uy; v5 = 0uy; v6 = 0uy; v7 = 0uy;
 	v8 = 0uy; v9 = 0uy; va = 0uy; vb = 0uy;
 	vc = 0uy; vd = 0uy; ve = 0uy; vf = 0uy;
 }
 
-let mem = File.ReadAllBytes ("rom.c8")
+let mem = Array.zeroCreate 4096
 
 let mutable timers = { delayValue = 0uy; soundValue = 0uy; lastUpdate = DateTime.Now }
 let updateTimers timers = 
@@ -79,13 +85,15 @@ let updateTimers timers =
 
 let print x = printfn "%A" x; x
 
+let rand = new Random()
+
 let decode state =
 	let addr x y z = ((x |> uint16) <<< 8) ||| ((y |> uint16) <<< 4) ||| ((z |> uint16) <<< 0) in
 	let const2 x y = (x <<< 4) ||| y in
-	let a = (mem.[state.ip+0] &&& 0xf0uy >>> 8) in
-	let b = (mem.[state.ip+0] &&& 0x0fuy >>> 0) in
-	let c = (mem.[state.ip+1] &&& 0xf0uy >>> 8) in
-	let d = (mem.[state.ip+1] &&& 0x0fuy >>> 0) in
+	let a = ((mem.[state.ip+0] &&& 0xf0uy) >>> 4) in
+	let b = ((mem.[state.ip+0] &&& 0x0fuy) >>> 0) in
+	let c = ((mem.[state.ip+1] &&& 0xf0uy) >>> 4) in
+	let d = ((mem.[state.ip+1] &&& 0x0fuy) >>> 0) in
 	let inst = match a with
 	| 0x0uy when b = 0x0uy && c = 0xeuy && d = 0x0uy -> ClearScreen
 	| 0x0uy when b = 0x0uy && c = 0xeuy && d = 0xeuy -> Return
@@ -190,12 +198,15 @@ let execute x =
 	let next state = { state with ip = state.ip + 2 } in
 	let skip state = { state with ip = state.ip + 4 } in
 	let jmp addr state = { state with ip = (addr |> int) } in
+	let call addr state =
+		stack.SetValue (state.ip + 2 |> uint16, state.sp + 1);
+		{ state with sp = state.sp + 1 } |> jmp addr in
 	match inst with
 	| ClearScreen -> s |> next // TODO
-	| Return -> s |> next // TODO
+	| Return -> let addr = stack.[s.sp] in { s with sp = s.sp - 1 } |> jmp addr
 	| SysCall(addr) -> s |> next
 	| Jump(addr) -> s |> jmp addr
-	| Call(addr) -> s |> jmp addr // TODO
+	| Call(addr) -> s |> call addr
 	| SkipIfEqual(x,c) -> if (get x) = c then s |> skip else s |> next
 	| SkipIfNotEqual(x,c) -> if (get x) <> c then s |> skip else s |> next
 	| SkipIfRegistersEqual(x,y) -> if (get x) = (get y) then s |> skip else s |> next
@@ -226,7 +237,7 @@ let execute x =
 	| SkipIfRegistersNotEqual(x,y) -> if (get x) <> (get y) then s |> skip else s |> next
 	| StoreAddress(addr) -> s |> seti addr |> next
 	| JumpOffset(addr) -> s |> jmp (addr + (get 0uy |> uint16))
-	| StoreRandom(x,c) -> s |> next // TODO
+	| StoreRandom(x,c) -> s |> set x ((rand.Next(0, 255) |> uint8) &&& c) |> next
 	| DrawSprite(x,y,c) -> s |> next // TODO
 	| SkipIfPressed(x) -> s |> skip // TODO
 	| SkipIfNotPressed(x) -> s |> next // TODO
@@ -246,6 +257,11 @@ let run () =
 		timers <- updateTimers timers;
 		state <- state |> decode |> disassemble |> execute
 	done
+
+let loadRom name =
+	File.ReadAllBytes(name).CopyTo(mem,0x200)
+
 do
+	loadRom "PONG";
 	run ();
 	Console.ReadKey() |> ignore
