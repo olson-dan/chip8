@@ -9,6 +9,10 @@ type address = uint16
 type register = uint8
 type constant = uint8
 
+type behavior = OLD | NEW
+
+let shiftBehavior = NEW
+
 type instruction =
 	| SysCall of address
 	| ClearScreen
@@ -224,15 +228,15 @@ let execute x =
 		let a, b = get x, get y in
 		let c = if a > b then 1uy else 0uy in
 		s |> set x (a - b) |> set 0xfuy c |> next
-	| ShrRegister(x,y) ->
-		let a = get x in
+	| ShrRegister(x,y) -> 
+		let a = match shiftBehavior with OLD -> get y | NEW -> get x in
 		s |> set x (a >>> 1) |> set 0xfuy (a &&& 1uy) |> next
 	| ReverseSwbRegister(x,y) ->
 		let a, b = get x, get y in
 		let c = if b > a then 1uy else 0uy in
 		s |> set x (b - a) |> set 0xfuy c |> next
 	| ShlRegister(x,y) ->
-		let a = get x in
+		let a = match shiftBehavior with OLD -> get y | NEW -> get x in
 		s |> set x (a <<< 1) |> set 0xfuy (a &&& 0x80uy) |> next
 	| SkipIfRegistersNotEqual(x,y) -> if (get x) <> (get y) then s |> skip else s |> next
 	| StoreAddress(addr) -> s |> seti addr |> next
@@ -248,8 +252,17 @@ let execute x =
 	| AddAddress(x) -> s |> seti (s.addr + (get x |> uint16)) |> next
 	| SetAddressToSprite(x) -> s |> next // TODO
 	| StoreBCD(x) -> s |> next // TODO
-	| StoreRegisters(x) -> s |> next // TODO
-	| LoadRegisters(x) -> s |> next // TODO
+	| StoreRegisters(x) ->
+		for i in 0uy .. x do
+			mem.SetValue (get i, (s.addr |> int) + (i |> int))
+		done;
+		s |> next
+	| LoadRegisters(x) ->
+		let mutable a = s in
+		for i in 0uy .. x do
+			a <- a |> set i mem.[(s.addr |> int) + (i |> int)]
+		done;
+		a |> next
 
 let run () =
 	let disassemble = if debug then disassemble else (fun x -> x) in
