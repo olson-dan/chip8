@@ -80,6 +80,7 @@ let mutable timers = { delayValue = 0uy; soundValue = 0uy; lastUpdate = DateTime
 let updateTimers timers = 
 	let now = DateTime.Now in
 	let diff = now - timers.lastUpdate in
+	//let _ = if timers.soundValue > 0uy then Console.Beep(800,17) else () in
 	if diff.TotalMilliseconds < 16.6 then timers else
 	{
 		delayValue = if timers.delayValue > 0uy then timers.delayValue - 1uy else 0uy;
@@ -169,8 +170,8 @@ let disassemble x =
 	| SkipIfNotPressed(x) -> sprintf "SKNP V%X" x
 	| SetFromDelay(x) -> sprintf "LD V%X, DT" x
 	| WaitKeyPress(x) -> sprintf "LD V%X, K" x
-	| SetToDelay(x) -> sprintf "LD DT, %X" x
-	| SetToSound(x) -> sprintf "LD ST, %X" x
+	| SetToDelay(x) -> sprintf "LD DT, V%X" x
+	| SetToSound(x) -> sprintf "LD ST, V%X" x
 	| AddAddress(x) -> sprintf "ADD I, V%X" x
 	| SetAddressToSprite(x) -> sprintf "LD F, V%X" x
 	| StoreBCD(x) -> sprintf "LD B, V%X" x
@@ -254,7 +255,12 @@ let execute x =
 		(match get x with
 		| a when a <= 0xfuy -> s |> seti (5us * (a |> uint16)) |> next
 		| a -> failwith <| sprintf "Attempt to access invalid rom font glyph %X" a)
-	| StoreBCD(x) -> s |> next // TODO
+	| StoreBCD(x) ->
+		let a = get x in
+		let h = a / 100uy in mem.SetValue (h, (s.addr |> int) + 0);
+		let t = (a - 100uy * h) / 10uy in mem.SetValue (t, (s.addr |> int) + 1);
+		let o = (a - 100uy * h - 10uy * t) in mem.SetValue (o, (s.addr |> int) + 1);
+		s |> next
 	| StoreRegisters(x) ->
 		for i in 0uy .. x do
 			mem.SetValue (get i, (s.addr |> int) + (i |> int))
